@@ -1,33 +1,64 @@
-# 1. taka a wiki url
-# 2. disdtill the content
+# 1. take a wiki URL
+# 2. distill the content
 # 3. convert to audio
 
+import argparse
+import os
+
+import pyttsx3
 import requests
 from bs4 import BeautifulSoup
-import pyttsx3
-import argparse
+
 
 def get_wiki_content(url):
     """Fetch and return the main text content from a Wikipedia page."""
-    response = requests.get(url)
+    if not url:
+        return ""
+
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+    except requests.RequestException:
+        return ""
+
     soup = BeautifulSoup(response.text, 'html.parser')
     content = soup.find('div', {'id': 'mw-content-text'})
     if not content:
         return ""
-    paragraphs = content.find_all('p')
-    text = '\n'.join([p.get_text() for p in paragraphs if p.get_text(strip=True)])
-    return text
+
+    paragraphs = []
+    for paragraph in content.find_all('p'):
+        text = paragraph.get_text(' ', strip=True)
+        if text:
+            paragraphs.append(' '.join(text.split()))
+    return '\n'.join(paragraphs)
+
 
 def distill_content(text, max_length=1000):
     """Distill the content to a summary (simple truncation for demo)."""
-    # For demo, just truncate. For real use, apply NLP summarization.
+    if not text:
+        return ""
+    if max_length is None or max_length <= 0:
+        return ""
     return text[:max_length]
+
 
 def convert_to_audio(text, filename='output.mp3'):
     """Convert text to audio and save as an MP3 file."""
+    if not text or not text.strip():
+        raise ValueError('Text must not be empty.')
+
+    output_dir = os.path.dirname(filename)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+
     engine = pyttsx3.init()
-    engine.save_to_file(text, filename)
-    engine.runAndWait()
+    try:
+        engine.save_to_file(text, filename)
+        engine.runAndWait()
+    finally:
+        engine.stop()
+
 
 def main():
     parser = argparse.ArgumentParser(description="Convert Wikipedia article to podcast audio.")
@@ -44,9 +75,14 @@ def main():
     print("Distilling content...")
     distilled = distill_content(wiki_text, max_length=args.max_length)
     print(f"Converting to audio: {args.output}")
-    convert_to_audio(distilled, filename=args.output)
+    try:
+        convert_to_audio(distilled, filename=args.output)
+    except ValueError as exc:
+        print(f"Audio generation failed: {exc}")
+        return
     print(f"Done! Audio saved to {args.output}")
 
+
 if __name__ == "__main__":
-    print("runing wikiToPodcast.py")
+    print("running wikiToPodcast.py")
     main()
